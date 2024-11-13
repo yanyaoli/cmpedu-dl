@@ -1,15 +1,22 @@
 # Cmpedu Downloader
 
-机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴项目。仅供学习交流和个人研究使用。
+机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。
 
 ## 如何使用
 
-例如，当您打开`http://www.cmpedu.com/books/book/12345.htm` 或 `http://www.cmpedu.com/ziyuans/ziyuan/12345.htm`等类似网页时，项目程序会自动在页面上显示该资源的下载链接，点击下载按钮即可下载。
+[点击安装油猴项目](https://greasyfork.org/scripts/483095)
 
-[ 点击安装油猴项目](https://greasyfork.org/scripts/483095)
+进入书籍或资源详情页自动显示下载面板
+
+支持以下网址格式：
+
+- `http://www.cmpedu.com/books/book/12345.htm`
+- `http://www.cmpedu.com/ziyuans/ziyuan/12345.htm`
+- `http://m.cmpedu.com/books/book/12345.htm`
+- `http://m.cmpedu.com/ziyuans/ziyuan/12345.htm`
 
 
-![示例](intro/example.png)
+![demo](intro/example.png)
 
 ## 免责声明
 

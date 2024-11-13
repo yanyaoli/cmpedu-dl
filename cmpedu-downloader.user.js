@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Cmpedu Resource Downloader
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。 
+// @version      1.3
+// @description  机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。
 // @author       yanyaoli
-// @match        http://www.cmpedu.com/ziyuans/ziyuan/*
-// @match        http://www.cmpedu.com/books/book/*
+// @match        *://*.cmpedu.com/ziyuans/ziyuan/*
+// @match        *://*.cmpedu.com/books/book/*
+// @connect      *.cmpedu.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // ==/UserScript==
@@ -13,7 +14,16 @@
 (function () {
     'use strict';
 
-    // 提取当前页面中的书籍ID（BOOK_ID）
+    // 动态设置 baseUrl，支持 www 和 m 域名
+    const isMobile = window.location.host.startsWith('m.');
+    const baseUrl = isMobile ? 'http://m.cmpedu.com' : 'http://www.cmpedu.com';
+
+    /**
+     * 提取页面中的书籍 ID (BOOK_ID)
+     * 适配两种路径：
+     * - http://www.cmpedu.com/books/book/12345.htm
+     * - http://www.cmpedu.com/ziyuans/ziyuan/12345.htm
+     */
     let bookId = null;
     if (window.location.href.includes('books/book')) {
         bookId = window.location.pathname.split("/").pop().split(".")[0];
@@ -23,14 +33,17 @@
     }
 
     if (!bookId) {
-        console.error("无法提取BOOK_ID");
+        console.error("无法提取 BOOK_ID");
         return;
     }
 
-    const resourceUrl = `http://www.cmpedu.com/ziyuans/index.htm?BOOK_ID=${bookId}`;
+    // 资源页面 URL
+    const resourceUrl = `${baseUrl}/ziyuans/index.htm?BOOK_ID=${bookId}`;
     const panelId = "downloadPanel";
 
-    // 创建下载链接展示面板
+    /**
+     * 创建显示下载链接的 UI 面板
+     */
     const createPanel = () => {
         const panel = document.createElement('div');
         panel.id = panelId;
@@ -55,7 +68,10 @@
         document.body.appendChild(panel);
     };
 
-    // 更新面板内容
+    /**
+     * 更新面板内容
+     * @param {string} content 要更新的 HTML 内容
+     */
     const updatePanel = (content) => {
         const panel = document.getElementById(panelId);
         if (panel) panel.innerHTML = content;
@@ -63,7 +79,9 @@
 
     createPanel();
 
-    // 获取资源页面并解析内容
+    /**
+     * 发送请求获取资源页面并解析内容
+     */
     GM_xmlhttpRequest({
         method: "GET",
         url: resourceUrl,
@@ -71,6 +89,7 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(response.responseText, "text/html");
 
+            // 查找所有资源列表
             const resourceDivs = doc.querySelectorAll("div.row.gjzy_list");
             const resources = Array.from(resourceDivs).map(div => {
                 const title = div.querySelector("div.gjzy_listRTit")?.textContent.trim() || "未知资源";
@@ -84,10 +103,11 @@
             }
 
             let downloadLinksText = "";
-
             let pendingRequests = resources.length;
+
+            // 遍历资源，获取每个资源的下载链接
             resources.forEach(({ title, resourceId }) => {
-                const downloadUrl = `http://www.cmpedu.com/ziyuans/d_ziyuan.df?id=${resourceId}`;
+                const downloadUrl = `${baseUrl}/ziyuans/d_ziyuan.df?id=${resourceId}`;
 
                 GM_xmlhttpRequest({
                     method: "GET",
@@ -101,6 +121,7 @@
                         "X-Requested-With": "XMLHttpRequest"
                     },
                     onload: function (response) {
+                        // 匹配 window.location.href 的下载链接
                         const downloadLinks = response.responseText.match(/window\.location\.href=\'(https?:\/\/[^\'"]+)\'/);
                         if (downloadLinks) {
                             const downloadLink = downloadLinks[1];
@@ -146,7 +167,6 @@
                                 <strong>${title}</strong><br>
                                 请求下载链接失败！
                             </div>`;
-
                         pendingRequests--;
                         if (pendingRequests === 0) {
                             updatePanel(downloadLinksText || "<strong>未找到有效的下载链接。</strong>");
