@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cmpedu Resource Downloader
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      2.0
 // @description  机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。
 // @author       yanyaoli
 // @match        *://*.cmpedu.com/ziyuans/ziyuan/*
@@ -11,104 +11,148 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-(function () {
+(function() {
     'use strict';
 
-    // 动态设置 baseUrl，支持 www 和 m 域名
+    // 样式注入
+    GM_addStyle(`
+        .cmp-panel { position: fixed; top: 20px; right: 20px; width: 300px; max-height: 70vh; background: #ced6e0; border-radius: 12px; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); z-index: 99999; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; transition: transform 0.2s ease; }
+        .panel-header { padding: 16px; background: #a4b0be; border-bottom: 1px solid #747d8c; display: flex; justify-content: space-between; align-items: center; }
+        .panel-title { margin: 0; font-size: 16px; color: #1a1a1a; font-weight: 600; }
+        .close-btn { background: none; border: none; cursor: pointer; color: #6b7280; font-size: 24px; line-height: 1; padding: 4px; transition: color 0.2s; }
+        .close-btn:hover { color: #1a1a1a; }
+        .panel-content { padding: 16px; max-height: calc(70vh - 73px); overflow-y: auto; }
+        .resource-item { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+        .resource-item:hover { color: #1e90ff; }
+        .resource-item:last-child { border-bottom: none; }
+        .skeleton {
+            background: #f2f2f2;
+            border-radius: 4px;
+            height: 20px;
+            width: 100%;
+            margin-bottom: 12px;
+            animation: pulse 1.5s infinite;
+        }
+        .skeleton:last-child { margin-bottom: 0; }
+        .error-message { color: #dc3545; display: flex; align-items: center; gap: 8px; padding: 12px; background: #fff5f5; border-radius: 8px; margin: 8px 0; }
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        @media (max-width: 480px) { .cmp-panel { width: 90%; right: 5%; left: auto; top: 10px; } }
+    `);
+
+    // 基础配置
     const isMobile = window.location.host.startsWith('m.');
     const baseUrl = isMobile ? 'http://m.cmpedu.com' : 'http://www.cmpedu.com';
+    const panelId = "downloadPanel";
 
-    /**
-     * 提取页面中的书籍 ID (BOOK_ID)
-     * 适配两种路径：
-     * - http://www.cmpedu.com/books/book/12345.htm
-     * - http://www.cmpedu.com/ziyuans/ziyuan/12345.htm
-     */
-    let bookId = null;
-    if (window.location.href.includes('books/book')) {
-        bookId = window.location.pathname.split("/").pop().split(".")[0];
-    } else if (window.location.href.includes('ziyuans/ziyuan')) {
-        const bookIdElement = document.getElementById('BOOK_ID');
-        bookId = bookIdElement ? bookIdElement.value : null;
+    function extractBookId() {
+        if (window.location.href.includes('books/book')) {
+            return window.location.pathname.split("/").pop().split(".")[0];
+        }
+        if (window.location.href.includes('ziyuans/ziyuan')) {
+            const el = document.getElementById('BOOK_ID');
+            return el ? el.value : null;
+        }
+        return null;
     }
 
+    function createPanel() {
+        const panel = document.createElement('div');
+        panel.id = panelId;
+        panel.className = 'cmp-panel';
+        panel.innerHTML = `
+            <div class="panel-header">
+                <h3 class="panel-title">资源下载</h3>
+                <button class="close-btn" aria-label="关闭">×</button>
+            </div>
+            <div class="panel-content">
+                <div class="skeleton"></div>
+                <div class="skeleton"></div>
+                <div class="skeleton"></div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+        panel.querySelector('.close-btn').addEventListener('click', () => panel.remove());
+        return panel;
+    }
+
+    function updatePanelContent(panel, content) {
+        const panelContent = panel.querySelector('.panel-content');
+        panelContent.innerHTML = content;
+    }
+
+    function createResourceItem(title) {
+        return `
+            <div class="resource-item">
+                <strong style="flex: 1;">${title}</strong>
+            </div>
+        `;
+    }
+
+    function updateResourceItem(panel, index, content, downloadLink) {
+        const items = panel.querySelectorAll('.resource-item');
+        if(items[index]) {
+            const item = items[index];
+            item.innerHTML = `<strong style="flex: 1;">${content}</strong>`;
+            item.style.cursor = 'pointer';
+            item.setAttribute('data-download-link', downloadLink);
+            item.onclick = () => window.open(downloadLink, '_blank');
+        } else {
+            // If we don't have an existing item, append a new one
+            const panelContent = panel.querySelector('.panel-content');
+            const newItem = document.createElement('div');
+            newItem.className = 'resource-item';
+            newItem.innerHTML = `<strong style="flex: 1;">${content}</strong>`;
+            newItem.style.cursor = 'pointer';
+            newItem.setAttribute('data-download-link', downloadLink);
+            newItem.onclick = () => window.open(downloadLink, '_blank');
+            panelContent.appendChild(newItem);
+        }
+    }
+
+    function processResourceResponse(response, title) {
+        const downloadLinks = response.responseText.match(/window\.location\.href=\'(https?:\/\/[^\'"]+)\'/);
+        if (downloadLinks) {
+            return [title, downloadLinks[1]];
+        }
+        return [null, null];
+    }
+
+    // 主逻辑
+    const bookId = extractBookId();
     if (!bookId) {
         console.error("无法提取 BOOK_ID");
         return;
     }
-
-    // 资源页面 URL
     const resourceUrl = `${baseUrl}/ziyuans/index.htm?BOOK_ID=${bookId}`;
-    const panelId = "downloadPanel";
+    const panel = createPanel();
 
-    /**
-     * 创建显示下载链接的 UI 面板
-     */
-    const createPanel = () => {
-        const panel = document.createElement('div');
-        panel.id = panelId;
-        panel.style = `
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            width: 400px;
-            max-height: 70vh;
-            overflow-y: auto;
-            background: #ffffff;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            padding: 15px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.5;
-            color: #333;
-            z-index: 10000;
-        `;
-        panel.innerHTML = `<strong>正在加载资源...</strong>`;
-        document.body.appendChild(panel);
-    };
-
-    /**
-     * 更新面板内容
-     * @param {string} content 要更新的 HTML 内容
-     */
-    const updatePanel = (content) => {
-        const panel = document.getElementById(panelId);
-        if (panel) panel.innerHTML = content;
-    };
-
-    createPanel();
-
-    /**
-     * 发送请求获取资源页面并解析内容
-     */
     GM_xmlhttpRequest({
         method: "GET",
         url: resourceUrl,
-        onload: function (response) {
+        onload: function(response) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(response.responseText, "text/html");
-
-            // 查找所有资源列表
             const resourceDivs = doc.querySelectorAll("div.row.gjzy_list");
             const resources = Array.from(resourceDivs).map(div => {
-                const title = div.querySelector("div.gjzy_listRTit")?.textContent.trim() || "未知资源";
-                const resourceId = div.querySelector("a")?.href.split("/").pop().split(".")[0];
-                return { title, resourceId };
+                return {
+                    title: div.querySelector("div.gjzy_listRTit")?.textContent.trim() || "未知资源",
+                    resourceId: div.querySelector("a")?.href.split("/").pop().split(".")[0]
+                };
             });
 
             if (resources.length === 0) {
-                updatePanel("<strong>未找到资源。</strong>");
+                updatePanelContent(panel, "<strong>未找到资源。</strong>");
                 return;
             }
 
-            let downloadLinksText = "";
-            let pendingRequests = resources.length;
+            // Clear skeleton placeholders before adding real content
+            updatePanelContent(panel, '');
 
-            // 遍历资源，获取每个资源的下载链接
-            resources.forEach(({ title, resourceId }) => {
+            resources.forEach(({ title, resourceId }, index) => {
                 const downloadUrl = `${baseUrl}/ziyuans/d_ziyuan.df?id=${resourceId}`;
-
                 GM_xmlhttpRequest({
                     method: "GET",
                     url: downloadUrl,
@@ -120,63 +164,22 @@
                         "Accept-Language": "en-US,en;q=0.9",
                         "X-Requested-With": "XMLHttpRequest"
                     },
-                    onload: function (response) {
-                        // 匹配 window.location.href 的下载链接
-                        const downloadLinks = response.responseText.match(/window\.location\.href=\'(https?:\/\/[^\'"]+)\'/);
-                        if (downloadLinks) {
-                            const downloadLink = downloadLinks[1];
-                            downloadLinksText += `
-                                <div style="margin-bottom: 20px; display: flex; align-items: center;">
-                                    <strong style="flex: 1;">${title}</strong>
-                                    <a href="${downloadLink}" target="_blank" style="text-decoration: none;">
-                                        <button style="
-                                            display: flex;
-                                            align-items: center;
-                                            background: #007BFF;
-                                            color: #fff;
-                                            border: none;
-                                            border-radius: 5px;
-                                            padding: 10px 15px;
-                                            cursor: pointer;
-                                            font-size: 14px;
-                                            transition: background 0.3s;
-                                        " onmouseover="this.style.background='#0056b3'" onmouseout="this.style.background='#007BFF'">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px; margin-right: 5px;">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M8 10l4 4m0 0l4-4m-4 4V4" />
-                                            </svg>
-                                            下载
-                                        </button>
-                                    </a>
-                                </div>`;
+                    onload: function(response) {
+                        const [resourceTitle, downloadLink] = processResourceResponse(response, title);
+                        if (resourceTitle) {
+                            updateResourceItem(panel, index, resourceTitle, downloadLink);
                         } else {
-                            downloadLinksText += `
-                                <div style="margin-bottom: 20px; color: red;">
-                                    <strong>${title}</strong><br>
-                                    未找到下载链接！
-                                </div>`;
-                        }
-
-                        pendingRequests--;
-                        if (pendingRequests === 0) {
-                            updatePanel(downloadLinksText || "<strong>未找到有效的下载链接。</strong>");
+                            updateResourceItem(panel, index, `${title} - 链接解析失败`, null);
                         }
                     },
-                    onerror: function () {
-                        downloadLinksText += `
-                            <div style="margin-bottom: 20px; color: red;">
-                                <strong>${title}</strong><br>
-                                请求下载链接失败！
-                            </div>`;
-                        pendingRequests--;
-                        if (pendingRequests === 0) {
-                            updatePanel(downloadLinksText || "<strong>未找到有效的下载链接。</strong>");
-                        }
+                    onerror: function() {
+                        updateResourceItem(panel, index, `${title} - 请求失败`, null);
                     }
                 });
             });
         },
-        onerror: function () {
-            updatePanel("<strong>获取资源页面失败。</strong>");
+        onerror: function() {
+            updatePanelContent(panel, "<strong>获取资源页面失败。</strong>");
         }
     });
 })();
