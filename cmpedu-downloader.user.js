@@ -9,13 +9,15 @@
 // @connect      *.cmpedu.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @downloadURL https://update.greasyfork.org/scripts/483095/Cmpedu%20Resource%20Downloader.user.js
+// @updateURL https://update.greasyfork.org/scripts/483095/Cmpedu%20Resource%20Downloader.meta.js
 // ==/UserScript==
 
-(function() {
-    'use strict';
+(function () {
+  'use strict';
 
-    // 样式注入
-    GM_addStyle(`
+  // 样式注入
+  GM_addStyle(`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
@@ -60,7 +62,7 @@
             z-index: 99999;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
             overflow: hidden;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: left 0.1s ease-out, top 0.1s ease-out;
             border: 1px solid var(--panel-border);
             transform-origin: top right;
             opacity: 0;
@@ -284,27 +286,27 @@
         }
     `);
 
-    // 基础配置
-    const isMobile = window.location.host.startsWith('m.');
-    const baseUrl = isMobile ? 'http://m.cmpedu.com' : 'http://www.cmpedu.com';
-    const panelId = "downloadPanel";
+  // 基础配置
+  const isMobile = window.location.host.startsWith('m.');
+  const baseUrl = isMobile ? 'http://m.cmpedu.com' : 'http://www.cmpedu.com';
+  const panelId = "downloadPanel";
 
-    function extractBookId() {
-        if (window.location.href.includes('books/book')) {
-            return window.location.pathname.split("/").pop().split(".")[0];
-        }
-        if (window.location.href.includes('ziyuans/ziyuan')) {
-            const el = document.getElementById('BOOK_ID');
-            return el ? el.value : null;
-        }
-        return null;
+  function extractBookId() {
+    if (window.location.href.includes('books/book')) {
+      return window.location.pathname.split("/").pop().split(".")[0];
     }
+    if (window.location.href.includes('ziyuans/ziyuan')) {
+      const el = document.getElementById('BOOK_ID');
+      return el ? el.value : null;
+    }
+    return null;
+  }
 
-    function createPanel() {
-        const panel = document.createElement('div');
-        panel.id = panelId;
-        panel.className = 'cmp-panel';
-        panel.innerHTML = `
+  function createPanel() {
+    const panel = document.createElement('div');
+    panel.id = panelId;
+    panel.className = 'cmp-panel';
+    panel.innerHTML = `
             <div class="panel-header">
                 <h3 class="panel-title">机工教育资源下载</h3>
                 <button class="close-btn" aria-label="关闭">×</button>
@@ -321,25 +323,53 @@
                 </a>
             </div>
         `;
-        document.body.appendChild(panel);
+    document.body.appendChild(panel);
 
-        // 添加关闭动画
-        panel.querySelector('.close-btn').addEventListener('click', () => {
-            panel.style.opacity = '0';
-            panel.style.transform = 'scale(0.95)';
-            setTimeout(() => panel.remove(), 300);
-        });
+    // 添加关闭动画
+    panel.querySelector('.close-btn').addEventListener('click', () => {
+      panel.style.opacity = '0';
+      panel.style.transform = 'scale(0.95)';
+      setTimeout(() => panel.remove(), 300);
+    });
 
-        return panel;
-    }
+    // 拖动面板
+    const header = panel.querySelector('.panel-header');
+    let isDragging = false;
+    let offset = { x: 0, y: 0 };
 
-    function updatePanelContent(panel, content) {
-        const panelContent = panel.querySelector('.panel-content');
-        panelContent.innerHTML = content;
-    }
+    header.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      offset.x = e.clientX - panel.getBoundingClientRect().left;
+      offset.y = e.clientY - panel.getBoundingClientRect().top;
+      document.body.style.cursor = 'grabbing'; // 改成抓取手势
+      e.preventDefault(); // 防止文本选择
+    });
 
-    function createResourceItem(title, index) {
-        return `
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+
+      // 确保面板的移动使用 `requestAnimationFrame`
+      window.requestAnimationFrame(() => {
+        panel.style.left = `${e.clientX - offset.x}px`;
+        panel.style.top = `${e.clientY - offset.y}px`;
+      });
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      document.body.style.cursor = 'default'; // 恢复光标
+    });
+
+    return panel;
+  }
+
+  function updatePanelContent(panel, content) {
+    const panelContent = panel.querySelector('.panel-content');
+    panelContent.innerHTML = content;
+  }
+
+  function createResourceItem(title, index) {
+    return `
             <div class="resource-item" data-index="${index}">
                 <div class="title">${title}</div>
                 <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -349,23 +379,23 @@
                 </svg>
             </div>
         `;
+  }
+
+  function updateResourceItem(panel, index, content, downloadLink) {
+    const items = panel.querySelectorAll('.resource-item');
+    let item = null;
+
+    // 查找对应索引的项目
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].getAttribute('data-index') == index) {
+        item = items[i];
+        break;
+      }
     }
 
-    function updateResourceItem(panel, index, content, downloadLink) {
-        const items = panel.querySelectorAll('.resource-item');
-        let item = null;
-
-        // 查找对应索引的项目
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].getAttribute('data-index') == index) {
-                item = items[i];
-                break;
-            }
-        }
-
-        if (item) {
-            if (downloadLink) {
-                item.innerHTML = `
+    if (item) {
+      if (downloadLink) {
+        item.innerHTML = `
                     <div class="title">${content}</div>
                     <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -373,31 +403,31 @@
                         <line x1="12" y1="15" x2="12" y2="3"></line>
                     </svg>
                 `;
-                item.style.cursor = 'pointer';
-                item.classList.remove('disabled');
-                item.setAttribute('data-download-link', downloadLink);
+        item.style.cursor = 'pointer';
+        item.classList.remove('disabled');
+        item.setAttribute('data-download-link', downloadLink);
 
-                // 添加点击效果
-                item.onclick = () => {
-                    window.open(downloadLink, '_blank');
-                };
-            } else {
-                item.innerHTML = `
+        // 添加点击效果
+        item.onclick = () => {
+          window.open(downloadLink, '_blank');
+        };
+      } else {
+        item.innerHTML = `
                     <div class="title">${content}</div>
                     <span style="font-size: 12px; color: var(--error-color);">无法下载</span>
                 `;
-                item.classList.add('disabled');
-                item.style.cursor = 'not-allowed';
-            }
-        } else {
-            // 如果没有找到现有项，添加新项
-            const panelContent = panel.querySelector('.panel-content');
-            const newItem = document.createElement('div');
-            newItem.className = 'resource-item';
-            newItem.setAttribute('data-index', index);
+        item.classList.add('disabled');
+        item.style.cursor = 'not-allowed';
+      }
+    } else {
+      // 如果没有找到现有项，添加新项
+      const panelContent = panel.querySelector('.panel-content');
+      const newItem = document.createElement('div');
+      newItem.className = 'resource-item';
+      newItem.setAttribute('data-index', index);
 
-            if (downloadLink) {
-                newItem.innerHTML = `
+      if (downloadLink) {
+        newItem.innerHTML = `
                     <div class="title">${content}</div>
                     <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -405,58 +435,58 @@
                         <line x1="12" y1="15" x2="12" y2="3"></line>
                     </svg>
                 `;
-                newItem.style.cursor = 'pointer';
-                newItem.setAttribute('data-download-link', downloadLink);
-                newItem.onclick = () => {
-                    window.open(downloadLink, '_blank');
-                };
-            } else {
-                newItem.innerHTML = `
+        newItem.style.cursor = 'pointer';
+        newItem.setAttribute('data-download-link', downloadLink);
+        newItem.onclick = () => {
+          window.open(downloadLink, '_blank');
+        };
+      } else {
+        newItem.innerHTML = `
                     <div class="title">${content}</div>
                     <span style="font-size: 12px; color: var(--error-color);">无法下载</span>
                 `;
-                newItem.classList.add('disabled');
-                newItem.style.cursor = 'not-allowed';
-            }
+        newItem.classList.add('disabled');
+        newItem.style.cursor = 'not-allowed';
+      }
 
-            panelContent.appendChild(newItem);
-        }
+      panelContent.appendChild(newItem);
     }
+  }
 
-    function processResourceResponse(response, title) {
-        const downloadLinks = response.responseText.match(/window\.location\.href=\'(https?:\/\/[^\'"]+)\'/);
-        if (downloadLinks) {
-            return [title, downloadLinks[1]];
-        }
-        return [null, null];
+  function processResourceResponse(response, title) {
+    const downloadLinks = response.responseText.match(/window\.location\.href=\'(https?:\/\/[^\'"]+)\'/);
+    if (downloadLinks) {
+      return [title, downloadLinks[1]];
     }
+    return [null, null];
+  }
 
-    // 主逻辑
-    const bookId = extractBookId();
-    if (!bookId) {
-        console.error("无法提取 BOOK_ID");
-        return;
-    }
+  // 主逻辑
+  const bookId = extractBookId();
+  if (!bookId) {
+    console.error("无法提取 BOOK_ID");
+    return;
+  }
 
-    const resourceUrl = `${baseUrl}/ziyuans/index.htm?BOOK_ID=${bookId}`;
-    const panel = createPanel();
+  const resourceUrl = `${baseUrl}/ziyuans/index.htm?BOOK_ID=${bookId}`;
+  const panel = createPanel();
 
-    GM_xmlhttpRequest({
-        method: "GET",
-        url: resourceUrl,
-        onload: function(response) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(response.responseText, "text/html");
-            const resourceDivs = doc.querySelectorAll("div.row.gjzy_list");
-            const resources = Array.from(resourceDivs).map(div => {
-                return {
-                    title: div.querySelector("div.gjzy_listRTit")?.textContent.trim() || "未知资源",
-                    resourceId: div.querySelector("a")?.href.split("/").pop().split(".")[0]
-                };
-            });
+  GM_xmlhttpRequest({
+    method: "GET",
+    url: resourceUrl,
+    onload: function (response) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(response.responseText, "text/html");
+      const resourceDivs = doc.querySelectorAll("div.row.gjzy_list");
+      const resources = Array.from(resourceDivs).map(div => {
+        return {
+          title: div.querySelector("div.gjzy_listRTit")?.textContent.trim() || "未知资源",
+          resourceId: div.querySelector("a")?.href.split("/").pop().split(".")[0]
+        };
+      });
 
-            if (resources.length === 0) {
-                updatePanelContent(panel, `
+      if (resources.length === 0) {
+        updatePanelContent(panel, `
                     <div class="empty-state">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
@@ -466,49 +496,49 @@
                         <p>未找到可下载的资源</p>
                     </div>
                 `);
-                return;
+        return;
+      }
+
+      // 清除骨架屏，添加真实内容
+      updatePanelContent(panel, '');
+
+      // 先显示所有资源项的占位
+      resources.forEach(({ title }, index) => {
+        const panelContent = panel.querySelector('.panel-content');
+        const itemHTML = createResourceItem(title, index);
+        panelContent.innerHTML += itemHTML;
+      });
+
+      // 然后逐个请求下载链接
+      resources.forEach(({ title, resourceId }, index) => {
+        const downloadUrl = `${baseUrl}/ziyuans/d_ziyuan.df?id=${resourceId}`;
+        GM_xmlhttpRequest({
+          method: "GET",
+          url: downloadUrl,
+          headers: {
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Accept": "text/html, */*; q=0.01",
+            "User-Agent": "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_3 like Mac OS X; en-us) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8J2 Safari/6533.18.5",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          onload: function (response) {
+            const [resourceTitle, downloadLink] = processResourceResponse(response, title);
+            if (resourceTitle) {
+              updateResourceItem(panel, index, resourceTitle, downloadLink);
+            } else {
+              updateResourceItem(panel, index, `${title} - 链接解析失败`, null);
             }
-
-            // 清除骨架屏，添加真实内容
-            updatePanelContent(panel, '');
-
-            // 先显示所有资源项的占位
-            resources.forEach(({ title }, index) => {
-                const panelContent = panel.querySelector('.panel-content');
-                const itemHTML = createResourceItem(title, index);
-                panelContent.innerHTML += itemHTML;
-            });
-
-            // 然后逐个请求下载链接
-            resources.forEach(({ title, resourceId }, index) => {
-                const downloadUrl = `${baseUrl}/ziyuans/d_ziyuan.df?id=${resourceId}`;
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: downloadUrl,
-                    headers: {
-                        "Accept-Encoding": "gzip, deflate",
-                        "Connection": "keep-alive",
-                        "Accept": "text/html, */*; q=0.01",
-                        "User-Agent": "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_3 like Mac OS X; en-us) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8J2 Safari/6533.18.5",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "X-Requested-With": "XMLHttpRequest"
-                    },
-                    onload: function(response) {
-                        const [resourceTitle, downloadLink] = processResourceResponse(response, title);
-                        if (resourceTitle) {
-                            updateResourceItem(panel, index, resourceTitle, downloadLink);
-                        } else {
-                            updateResourceItem(panel, index, `${title} - 链接解析失败`, null);
-                        }
-                    },
-                    onerror: function() {
-                        updateResourceItem(panel, index, `${title} - 请求失败`, null);
-                    }
-                });
-            });
-        },
-        onerror: function() {
-            updatePanelContent(panel, `
+          },
+          onerror: function () {
+            updateResourceItem(panel, index, `${title} - 请求失败`, null);
+          }
+        });
+      });
+    },
+    onerror: function () {
+      updatePanelContent(panel, `
                 <div class="error-message">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -518,6 +548,6 @@
                     <span>获取资源页面失败，请刷新重试</span>
                 </div>
             `);
-        }
-    });
+    }
+  });
 })();
