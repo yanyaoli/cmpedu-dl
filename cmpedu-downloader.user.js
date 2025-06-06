@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cmpedu Resource Downloader
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      3.0
 // @description  机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。
 // @author       yanyaoli
 // @match        *://*.cmpedu.com/ziyuans/ziyuan/*
@@ -16,30 +16,272 @@
 
     // 样式注入
     GM_addStyle(`
-        .cmp-panel { position: fixed; top: 20px; right: 20px; width: 300px; max-height: 70vh; background: #ced6e0; border-radius: 12px; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); z-index: 99999; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; transition: transform 0.2s ease; }
-        .panel-header { padding: 16px; background: #a4b0be; border-bottom: 1px solid #747d8c; display: flex; justify-content: space-between; align-items: center; }
-        .panel-title { margin: 0; font-size: 16px; color: #1a1a1a; font-weight: 600; }
-        .close-btn { background: none; border: none; cursor: pointer; color: #6b7280; font-size: 24px; line-height: 1; padding: 4px; transition: color 0.2s; }
-        .close-btn:hover { color: #1a1a1a; }
-        .panel-content { padding: 16px; max-height: calc(70vh - 73px); overflow-y: auto; }
-        .resource-item { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
-        .resource-item:hover { color: #1e90ff; }
-        .resource-item:last-child { border-bottom: none; }
-        .skeleton {
-            background: #f2f2f2;
-            border-radius: 4px;
-            height: 20px;
-            width: 100%;
-            margin-bottom: 12px;
-            animation: pulse 1.5s infinite;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --panel-bg: rgba(250, 250, 250, 0.95);
+            --panel-border: rgba(0, 0, 0, 0.06);
+            --header-bg: rgba(255, 255, 255, 0.8);
+            --text-primary: #000000;
+            --text-secondary: #6e6e73;
+            --accent-color: #0071e3;
+            --accent-hover: #0077ed;
+            --item-hover: rgba(0, 0, 0, 0.03);
+            --item-active: rgba(0, 0, 0, 0.05);
+            --item-border: rgba(0, 0, 0, 0.06);
+            --error-color: #ff3b30;
+            --success-color: #34c759;
         }
-        .skeleton:last-child { margin-bottom: 0; }
-        .error-message { color: #dc3545; display: flex; align-items: center; gap: 8px; padding: 12px; background: #fff5f5; border-radius: 8px; margin: 8px 0; }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --panel-bg: rgba(40, 40, 40, 0.95);
+                --panel-border: rgba(255, 255, 255, 0.1);
+                --header-bg: rgba(50, 50, 50, 0.8);
+                --text-primary: #ffffff;
+                --text-secondary: #a1a1a6;
+                --item-hover: rgba(255, 255, 255, 0.05);
+                --item-active: rgba(255, 255, 255, 0.1);
+                --item-border: rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        .cmp-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-height: 75vh;
+            background: var(--panel-bg);
+            border-radius: 16px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 99999;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid var(--panel-border);
+            transform-origin: top right;
+            opacity: 0;
+            transform: scale(0.95);
+            animation: panel-appear 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes panel-appear {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            background: var(--header-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--item-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 16px;
+            color: var(--text-primary);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 22px;
+            line-height: 1;
+            padding: 4px;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            margin: -4px;
+        }
+
+        .close-btn:hover {
+            background-color: var(--item-hover);
+            color: var(--text-primary);
+        }
+
+        .close-btn:active {
+            background-color: var(--item-active);
+            transform: scale(0.95);
+        }
+
+        .panel-content {
+            padding: 8px 0;
+            max-height: calc(75vh - 60px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: var(--text-secondary) transparent;
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background-color: var(--text-secondary);
+            border-radius: 3px;
+            opacity: 0.5;
+        }
+
+        .resource-item {
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--item-border);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            position: relative;
+            color: var(--text-primary);
+        }
+
+        .resource-item:last-child {
+            border-bottom: none;
+        }
+
+        .resource-item:hover {
+            background-color: var(--item-hover);
+        }
+
+        .resource-item:active {
+            background-color: var(--item-active);
+        }
+
+        .resource-item.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .resource-item .title {
+            flex: 1;
+            font-weight: 500;
+            font-size: 14px;
+            margin-right: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .resource-item .download-icon {
+            color: var(--accent-color);
+            font-size: 16px;
+            transition: color 0.2s ease;
+            margin-left: 5px;
+        }
+
+        .resource-item .download-icon:hover {
+            color: var(--accent-hover);
+        }
+
+        .skeleton {
+            height: 20px;
+            margin: 12px 20px;
+            border-radius: 6px;
+            background: linear-gradient(90deg,
+                var(--item-border) 0%,
+                var(--item-hover) 50%,
+                var(--item-border) 100%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+        }
+
+        .skeleton:nth-child(2) {
+            width: 85%;
+        }
+
+        .skeleton:nth-child(3) {
+            width: 70%;
+        }
+
         @keyframes skeleton-loading {
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
-        @media (max-width: 480px) { .cmp-panel { width: 90%; right: 5%; left: auto; top: 10px; } }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .error-message {
+            color: var(--error-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: rgba(255, 59, 48, 0.1);
+            border-radius: 8px;
+            margin: 12px 20px;
+            font-size: 14px;
+        }
+
+        .success-message {
+            color: var(--success-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: rgba(52, 199, 89, 0.1);
+            border-radius: 8px;
+            margin: 12px 20px;
+            font-size: 14px;
+        }
+
+        .github-icon {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .github-icon:hover {
+            transform: scale(1.1);
+        }
+
+        .panel-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--item-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 480px) {
+            .cmp-panel {
+                width: calc(100% - 32px);
+                right: 16px;
+                left: 16px;
+                top: 16px;
+                max-height: 80vh;
+            }
+        }
     `);
 
     // 基础配置
@@ -64,7 +306,7 @@
         panel.className = 'cmp-panel';
         panel.innerHTML = `
             <div class="panel-header">
-                <h3 class="panel-title">资源下载</h3>
+                <h3 class="panel-title">机工教育资源下载</h3>
                 <button class="close-btn" aria-label="关闭">×</button>
             </div>
             <div class="panel-content">
@@ -72,9 +314,22 @@
                 <div class="skeleton"></div>
                 <div class="skeleton"></div>
             </div>
+            <div class="panel-footer">
+                <span>v3.1</span>
+                <a href="https://github.com/yanyaoli/cmpedu-dl" target="_blank">
+                    <img src="https://simpleicons.org/icons/github.svg" alt="GitHub" class="github-icon" />
+                </a>
+            </div>
         `;
         document.body.appendChild(panel);
-        panel.querySelector('.close-btn').addEventListener('click', () => panel.remove());
+
+        // 添加关闭动画
+        panel.querySelector('.close-btn').addEventListener('click', () => {
+            panel.style.opacity = '0';
+            panel.style.transform = 'scale(0.95)';
+            setTimeout(() => panel.remove(), 300);
+        });
+
         return panel;
     }
 
@@ -83,31 +338,87 @@
         panelContent.innerHTML = content;
     }
 
-    function createResourceItem(title) {
+    function createResourceItem(title, index) {
         return `
-            <div class="resource-item">
-                <strong style="flex: 1;">${title}</strong>
+            <div class="resource-item" data-index="${index}">
+                <div class="title">${title}</div>
+                <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
             </div>
         `;
     }
 
     function updateResourceItem(panel, index, content, downloadLink) {
         const items = panel.querySelectorAll('.resource-item');
-        if(items[index]) {
-            const item = items[index];
-            item.innerHTML = `<strong style="flex: 1;">${content}</strong>`;
-            item.style.cursor = 'pointer';
-            item.setAttribute('data-download-link', downloadLink);
-            item.onclick = () => window.open(downloadLink, '_blank');
+        let item = null;
+
+        // 查找对应索引的项目
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].getAttribute('data-index') == index) {
+                item = items[i];
+                break;
+            }
+        }
+
+        if (item) {
+            if (downloadLink) {
+                item.innerHTML = `
+                    <div class="title">${content}</div>
+                    <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                `;
+                item.style.cursor = 'pointer';
+                item.classList.remove('disabled');
+                item.setAttribute('data-download-link', downloadLink);
+
+                // 添加点击效果
+                item.onclick = () => {
+                    window.open(downloadLink, '_blank');
+                };
+            } else {
+                item.innerHTML = `
+                    <div class="title">${content}</div>
+                    <span style="font-size: 12px; color: var(--error-color);">无法下载</span>
+                `;
+                item.classList.add('disabled');
+                item.style.cursor = 'not-allowed';
+            }
         } else {
-            // If we don't have an existing item, append a new one
+            // 如果没有找到现有项，添加新项
             const panelContent = panel.querySelector('.panel-content');
             const newItem = document.createElement('div');
             newItem.className = 'resource-item';
-            newItem.innerHTML = `<strong style="flex: 1;">${content}</strong>`;
-            newItem.style.cursor = 'pointer';
-            newItem.setAttribute('data-download-link', downloadLink);
-            newItem.onclick = () => window.open(downloadLink, '_blank');
+            newItem.setAttribute('data-index', index);
+
+            if (downloadLink) {
+                newItem.innerHTML = `
+                    <div class="title">${content}</div>
+                    <svg class="download-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                `;
+                newItem.style.cursor = 'pointer';
+                newItem.setAttribute('data-download-link', downloadLink);
+                newItem.onclick = () => {
+                    window.open(downloadLink, '_blank');
+                };
+            } else {
+                newItem.innerHTML = `
+                    <div class="title">${content}</div>
+                    <span style="font-size: 12px; color: var(--error-color);">无法下载</span>
+                `;
+                newItem.classList.add('disabled');
+                newItem.style.cursor = 'not-allowed';
+            }
+
             panelContent.appendChild(newItem);
         }
     }
@@ -126,6 +437,7 @@
         console.error("无法提取 BOOK_ID");
         return;
     }
+
     const resourceUrl = `${baseUrl}/ziyuans/index.htm?BOOK_ID=${bookId}`;
     const panel = createPanel();
 
@@ -144,13 +456,30 @@
             });
 
             if (resources.length === 0) {
-                updatePanelContent(panel, "<strong>未找到资源。</strong>");
+                updatePanelContent(panel, `
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <p>未找到可下载的资源</p>
+                    </div>
+                `);
                 return;
             }
 
-            // Clear skeleton placeholders before adding real content
+            // 清除骨架屏，添加真实内容
             updatePanelContent(panel, '');
 
+            // 先显示所有资源项的占位
+            resources.forEach(({ title }, index) => {
+                const panelContent = panel.querySelector('.panel-content');
+                const itemHTML = createResourceItem(title, index);
+                panelContent.innerHTML += itemHTML;
+            });
+
+            // 然后逐个请求下载链接
             resources.forEach(({ title, resourceId }, index) => {
                 const downloadUrl = `${baseUrl}/ziyuans/d_ziyuan.df?id=${resourceId}`;
                 GM_xmlhttpRequest({
@@ -179,7 +508,16 @@
             });
         },
         onerror: function() {
-            updatePanelContent(panel, "<strong>获取资源页面失败。</strong>");
+            updatePanelContent(panel, `
+                <div class="error-message">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span>获取资源页面失败，请刷新重试</span>
+                </div>
+            `);
         }
     });
 })();
