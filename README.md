@@ -34,3 +34,5 @@
 本项目为开源项目，仅供技术交流使用。禁止将本程序用于商业目的或其他违反法律法规的行为。
 
 用户在使用本程序时须严格遵守当地法律法规，任何违反法律的行为均由使用者自行承担。
+
+[![Powered by DartNode](https://dartnode.com/branding/DN-Open-Source-sm.png)](https://dartnode.com "Powered by DartNode - Free VPS for Open Source")
