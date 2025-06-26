@@ -35,4 +35,10 @@
 
 用户在使用本程序时须严格遵守当地法律法规，任何违反法律的行为均由使用者自行承担。
 
+---
+
+CDN acceleration and security protection for this project are sponsored by Tencent EdgeOne.
+[![CDN acceleration and security protection for this project are sponsored by Tencent EdgeOne.](https://edgeone.ai/_next/static/media/headLogo.daeb48ad.png?auto=format&fit=max&w=384)](https://edgeone.ai/?from=github)
+
+
 [![Powered by DartNode](https://dartnode.com/branding/DN-Open-Source-sm.png)](https://dartnode.com "Powered by DartNode - Free VPS for Open Source")
