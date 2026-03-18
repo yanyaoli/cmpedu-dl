@@ -6,6 +6,8 @@
 // @author       yanyaoli
 // @match        *://*.cmpedu.com/ziyuans/ziyuan/*
 // @match        *://*.cmpedu.com/books/book/*
+// @connect      www.cmpedu.com
+// @connect      m.cmpedu.com
 // @connect      *.cmpedu.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
