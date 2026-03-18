@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Cmpedu Resource Downloader
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.2
 // @description  机械工业出版社教育服务网资源下载，无需登录，无需教师权限，油猴脚本。
 // @author       yanyaoli
 // @match        *://*.cmpedu.com/ziyuans/ziyuan/*
 // @match        *://*.cmpedu.com/books/book/*
+// @connect      www.cmpedu.com
+// @connect      m.cmpedu.com
+// @connect      s.cmpedu.com
 // @connect      *.cmpedu.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
